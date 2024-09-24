@@ -2,46 +2,34 @@ import os
 import warnings
 import logging
 from typing import Union, Any, Optional, Dict
-
-# this has to be set before importing tf
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
-
-# pylint: disable=wrong-import-position
-import numpy as np
 import tensorflow as tf
+import numpy as np
 
+# Set environment variables before importing TensorFlow
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+
+# Import Model without version checks
+from tensorflow.keras.models import Model
+
+# Enable device placement logging
+tf.debugging.set_log_device_placement(True)
+
+# Rest of your imports
 from retinaface import __version__
 from retinaface.model import retinaface_model
 from retinaface.commons import preprocess, postprocess
 from retinaface.commons.logger import Logger
 from retinaface.commons import package_utils
 
-# users should install tf_keras package if they are using tf 2.16 or later versions
+# Validate for Keras 3 if necessary
 package_utils.validate_for_keras3()
 
 logger = Logger(module="retinaface/RetinaFace.py")
 
-# pylint: disable=global-variable-undefined, no-name-in-module, unused-import, too-many-locals, redefined-outer-name, too-many-statements, too-many-arguments
 
-# ---------------------------
-
-# configurations
-warnings.filterwarnings("ignore")
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-# Limit the amount of reserved VRAM so that other scripts can be run in the same GPU as well
-os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
-
-tf_version = int(tf.__version__.split(".", maxsplit=1)[0])
-
-if tf_version == 2:
-    tf.get_logger().setLevel(logging.ERROR)
-    from tensorflow.keras.models import Model
-else:
-    from keras.models import Model
-
-# ---------------------------
-
-
+# Build the model with device placement
 def build_model() -> Any:
     """
     Builds retinaface model once and store it into memory
@@ -50,10 +38,11 @@ def build_model() -> Any:
     global model  # singleton design pattern
 
     if not "model" in globals():
-        model = tf.function(
-            retinaface_model.build_model(),
-            input_signature=(tf.TensorSpec(shape=[None, None, None, 3], dtype=np.float32),),
-        )
+        with tf.device('/GPU:0'):
+            model = tf.function(
+                retinaface_model.build_model(),
+                input_signature=(tf.TensorSpec(shape=[None, None, None, 3], dtype=np.float32),),
+            )
 
     return model
 
